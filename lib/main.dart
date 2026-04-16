@@ -21,6 +21,7 @@ class CCTVMetaApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => NvrProvider()),
         ChangeNotifierProvider(create: (_) => TaskProvider()),
+        ChangeNotifierProvider(create: (_) => VpnProvider()),
       ],
       child: MaterialApp(
         title: 'CCTV Command Center',

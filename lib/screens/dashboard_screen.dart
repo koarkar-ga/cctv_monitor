@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/nvr_provider.dart';
 import '../providers/task_provider.dart';
+import '../providers/vpn_provider.dart';
 import '../widgets/camera_view_widget.dart';
 import '../widgets/nvr_form_dialog.dart';
 import '../widgets/download_tasks_dialog.dart';
@@ -20,6 +21,8 @@ class DashboardScreen extends StatelessWidget {
         backgroundColor: const Color(0xFF252538),
         elevation: 0,
         actions: [
+          _buildVpnStatus(context),
+          const SizedBox(width: 8),
           // Condense App Bar actions for mobile
           LayoutBuilder(builder: (context, constraints) {
             bool isMobile = MediaQuery.of(context).size.width < 600;
@@ -118,6 +121,94 @@ class DashboardScreen extends StatelessWidget {
             );
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildVpnStatus(BuildContext context) {
+    return Consumer<VpnProvider>(
+      builder: (context, vpn, _) {
+        final status = vpn.status;
+        return IconButton(
+          icon: Icon(
+            status.isConnected ? Icons.vpn_lock : Icons.vpn_lock_outlined,
+            color: status.isConnected ? Colors.greenAccent : Colors.white24,
+            size: 20,
+          ),
+          tooltip: 'Netbird VPN: ${status.management}',
+          onPressed: () => _showVpnDialog(context, vpn),
+        );
+      },
+    );
+  }
+
+  void _showVpnDialog(BuildContext context, VpnProvider vpn) {
+    showDialog(
+      context: context,
+      builder: (context) => Consumer<VpnProvider>(
+        builder: (context, vpn, _) {
+          final s = vpn.status;
+          return AlertDialog(
+            backgroundColor: const Color(0xFF252538),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                const Icon(Icons.security, color: Colors.blueAccent),
+                const SizedBox(width: 12),
+                const Text('Netbird VPN Status', style: TextStyle(color: Colors.white, fontSize: 18)),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _vpnInfoItem('Status', s.management, s.isConnected ? Colors.greenAccent : Colors.redAccent),
+                _vpnInfoItem('Netbird IP', s.ip, Colors.white),
+                _vpnInfoItem('Profile', s.profile, Colors.white),
+                _vpnInfoItem('Peers', s.peers, Colors.blueAccent),
+                if (s.lastError.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(s.lastError, style: const TextStyle(color: Colors.redAccent, fontSize: 10)),
+                ],
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: s.isConnected ? Colors.redAccent.withOpacity(0.8) : Colors.greenAccent.withOpacity(0.8),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    onPressed: vpn.isToggling ? null : () => vpn.toggleVpn(),
+                    child: vpn.isToggling 
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : Text(s.isConnected ? 'DISCONNECT VPN' : 'CONNECT VPN', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context), 
+                child: const Text('Close', style: TextStyle(color: Colors.white38))
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _vpnInfoItem(String label, String value, Color valueColor) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Colors.white38, fontSize: 13)),
+          Text(value, style: TextStyle(color: valueColor, fontSize: 13, fontWeight: FontWeight.bold)),
+        ],
       ),
     );
   }
