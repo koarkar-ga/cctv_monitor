@@ -33,13 +33,27 @@ class VpnProvider extends ChangeNotifier {
   final String _netbirdPath = '/usr/local/bin/netbird';
 
   VpnProvider() {
-    startPolling();
+    if (_isSupportedPlatform()) {
+      startPolling();
+    } else {
+      _status = VpnStatus(
+        management: 'Unavailable',
+        signal: 'N/A',
+        lastError: 'VPN Control only available on Desktop.',
+      );
+    }
+  }
+
+  bool _isSupportedPlatform() {
+    if (kIsWeb) return false;
+    return Platform.isMacOS || Platform.isWindows || Platform.isLinux;
   }
 
   void startPolling() {
+    if (!_isSupportedPlatform()) return;
     _timer?.cancel();
     updateStatus();
-    _timer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 15), (timer) {
       updateStatus();
     });
   }
@@ -51,6 +65,7 @@ class VpnProvider extends ChangeNotifier {
   }
 
   Future<void> updateStatus() async {
+    if (!_isSupportedPlatform()) return;
     try {
       final result = await Process.run(_netbirdPath, ['status']);
       if (result.exitCode == 0) {
@@ -60,7 +75,7 @@ class VpnProvider extends ChangeNotifier {
         _status = VpnStatus(lastError: 'Netbird CLI error: ${result.stderr}');
       }
     } catch (e) {
-      _status = VpnStatus(lastError: 'Failed to run netbird: $e');
+      _status = VpnStatus(lastError: 'Netbird not found or inaccessible.');
     }
     notifyListeners();
   }
@@ -101,14 +116,13 @@ class VpnProvider extends ChangeNotifier {
   }
 
   Future<void> toggleVpn() async {
+    if (!_isSupportedPlatform()) return;
     if (_isToggling) return;
     _isToggling = true;
     notifyListeners();
 
     try {
       final command = _status.isConnected ? 'down' : 'up';
-      // Note: This may prompt for password in the background on some systems
-      // or fail if it requires interactive sudo.
       final result = await Process.run(_netbirdPath, [command]);
       
       if (result.exitCode != 0) {
