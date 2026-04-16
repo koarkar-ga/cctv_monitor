@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/nvr_provider.dart';
 import 'providers/task_provider.dart';
+import 'providers/vpn_provider.dart';
 import 'screens/dashboard_screen.dart';
 
 import 'package:media_kit/media_kit.dart';
