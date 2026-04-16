@@ -101,8 +101,8 @@ class _NvrFormDialogState extends State<NvrFormDialog> {
                 validator: (value) => value == null || value.isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 12),
-              LayoutBuilder(builder: (context, constraints) {
-                bool isMobile = constraints.maxWidth < 450;
+              Builder(builder: (context) {
+                bool isMobile = MediaQuery.of(context).size.width < 550;
                 if (isMobile) {
                   return Column(
                     children: [
@@ -166,8 +166,8 @@ class _NvrFormDialogState extends State<NvrFormDialog> {
                 );
               }),
               const SizedBox(height: 12),
-              LayoutBuilder(builder: (context, constraints) {
-                bool isMobile = constraints.maxWidth < 450;
+              Builder(builder: (context) {
+                bool isMobile = MediaQuery.of(context).size.width < 550;
                 if (isMobile) {
                   return Column(
                     children: [
