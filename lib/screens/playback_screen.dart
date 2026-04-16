@@ -242,12 +242,22 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
 
   @override
   Widget build(BuildContext context) {
+    bool isMobile = MediaQuery.of(context).size.width < 900;
+
     return Scaffold(
       backgroundColor: const Color(0xFF1E1E2C),
       appBar: AppBar(
-        title: const Text('Intelligent Playback Control'),
+        title: const Text('Playback Control'),
         backgroundColor: const Color(0xFF252538),
         actions: [
+          if (isMobile)
+            Builder(
+              builder: (context) => IconButton(
+                icon: const Icon(Icons.search, color: Colors.blueAccent),
+                onPressed: () => Scaffold.of(context).openEndDrawer(),
+                tooltip: 'Search Recordings',
+              ),
+            ),
           if (_recordingService.isRecording)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
@@ -255,9 +265,10 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
             ),
         ],
       ),
+      endDrawer: isMobile ? Drawer(child: _buildExpandedSidebar(isDrawer: true)) : null,
       body: Row(
         children: [
-          _buildSidebar(),
+          if (!isMobile) _buildSidebar(),
           Expanded(child: _buildPlayerArea()),
         ],
       ),
@@ -292,7 +303,7 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
         const RotatedBox(
           quarterTurns: 3,
           child: Text(
-            'SEARCH PARAMETERS',
+            'SEARCH',
             style: TextStyle(
               color: Colors.white24,
               fontSize: 12,
@@ -305,60 +316,64 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
     );
   }
 
-  Widget _buildExpandedSidebar() {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'SEARCH PARAMETERS',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  letterSpacing: 1.1,
-                ),
-              ),
-              IconButton(
-                icon: const Icon(
-                  Icons.chevron_left,
-                  color: Colors.white38,
-                  size: 20,
-                ),
-                onPressed: () => setState(() => _isSidebarCollapsed = true),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                tooltip: 'Collapse Sidebar',
-              ),
-            ],
-          ),
-        ),
-        const Divider(color: Colors.white10, height: 1),
-        Expanded(
-          child: SingleChildScrollView(
+  Widget _buildExpandedSidebar({bool isDrawer = false}) {
+    return Container(
+      color: const Color(0xFF161621),
+      child: Column(
+        children: [
+          Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildDropdowns(),
-                const SizedBox(height: 24),
-                _buildTimePickers(),
-                const SizedBox(height: 24),
-                _buildSearchButton(),
-                const SizedBox(height: 24),
-                _buildAdvancedOptions(),
-                if (_searchSuccess && _recordedSegments.isNotEmpty) ...[
-                  const SizedBox(height: 32),
-                  _buildRecordingClips(),
-                ],
+                const Text(
+                  'SEARCH PARAMETERS',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+                if (!isDrawer)
+                IconButton(
+                  icon: const Icon(
+                    Icons.chevron_left,
+                    color: Colors.white38,
+                    size: 20,
+                  ),
+                  onPressed: () => setState(() => _isSidebarCollapsed = true),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  tooltip: 'Collapse Sidebar',
+                ),
               ],
             ),
           ),
-        ),
-      ],
+          const Divider(color: Colors.white10, height: 1),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildDropdowns(),
+                  const SizedBox(height: 24),
+                  _buildTimePickers(),
+                  const SizedBox(height: 24),
+                  _buildSearchButton(context),
+                  const SizedBox(height: 24),
+                  _buildAdvancedOptions(),
+                  if (_searchSuccess && _recordedSegments.isNotEmpty) ...[
+                    const SizedBox(height: 32),
+                    _buildRecordingClips(),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -648,7 +663,7 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
     );
   }
 
-  Widget _buildSearchButton() {
+  Widget _buildSearchButton(BuildContext context) {
     return SizedBox(
       width: double.infinity,
       height: 48,
@@ -662,7 +677,14 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
           elevation: 4,
           shadowColor: Colors.blueAccent.withOpacity(0.3),
         ),
-        onPressed: _isLoading ? null : _startPlayback,
+        onPressed: _isLoading 
+            ? null 
+            : () {
+                _startPlayback();
+                if (Navigator.of(context).canPop()) {
+                  Navigator.of(context).pop(); // Close drawer on search
+                }
+              },
         icon: _isLoading
             ? const SizedBox(
                 width: 20,

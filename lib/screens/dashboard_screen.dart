@@ -20,55 +20,23 @@ class DashboardScreen extends StatelessWidget {
         backgroundColor: const Color(0xFF252538),
         elevation: 0,
         actions: [
-          _buildQualityToggle(context),
-          const SizedBox(width: 12),
-          _buildBatchControls(context),
-          const SizedBox(width: 8),
-          _buildGridSelector(context),
-          const SizedBox(width: 8),
-          Consumer<TaskProvider>(
-            builder: (context, taskProvider, _) => Stack(
-              alignment: Alignment.center,
+          // Condense App Bar actions for mobile
+          LayoutBuilder(builder: (context, constraints) {
+            bool isMobile = MediaQuery.of(context).size.width < 600;
+            return Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                IconButton(
-                  icon: const Icon(Icons.download_for_offline, color: Colors.greenAccent),
-                  tooltip: 'Download Tasks',
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => const DownloadTasksDialog(),
-                    );
-                  },
-                ),
-                if (taskProvider.activeTaskCount > 0)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.all(2),
-                      decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                      constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
-                      child: Text(
-                        '${taskProvider.activeTaskCount}',
-                        style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
+                _buildQualityToggle(context, compact: isMobile),
+                const SizedBox(width: 8),
+                _buildBatchControls(context, compact: isMobile),
+                const SizedBox(width: 4),
+                _buildGridSelector(context),
+                _buildTaskButton(context),
+                _buildAddButton(context),
               ],
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.add_to_queue),
-            tooltip: 'Add NVR',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => const NvrFormDialog(),
-              );
-            },
-          ),
-          const SizedBox(width: 16),
+            );
+          }),
+          const SizedBox(width: 8),
         ],
       ),
       body: Padding(
@@ -112,33 +80,93 @@ class DashboardScreen extends StatelessWidget {
               crossAxisCount = _calcCrossAxisCount(itemCount);
             }
 
-            return GridView.builder(
-              itemCount: itemCount,
-              padding: const EdgeInsets.only(bottom: 20),
-              physics: provider.selectedCameraId != null 
-                ? const NeverScrollableScrollPhysics() 
-                : const BouncingScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossAxisCount,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-                childAspectRatio: 16 / 9,
-              ),
-              itemBuilder: (context, index) {
-                if (index < displayCameras.length) {
-                  final camera = displayCameras[index];
-                  return GestureDetector(
-                    onDoubleTap: () => provider.toggleSoloCamera(camera.id),
-                    child: CameraViewWidget(key: ValueKey(camera.id), camera: camera),
-                  );
-                } else {
-                  return _buildEmptySlot(context);
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                // Adaptive Column Logic
+                int effectiveCrossAxisCount = crossAxisCount;
+                if (constraints.maxWidth < 600) {
+                  effectiveCrossAxisCount = 1;
+                } else if (constraints.maxWidth < 1100) {
+                  effectiveCrossAxisCount = crossAxisCount > 2 ? 2 : crossAxisCount;
                 }
-              },
+
+                return GridView.builder(
+                  itemCount: itemCount,
+                  padding: const EdgeInsets.only(bottom: 20),
+                  physics: provider.selectedCameraId != null 
+                    ? const NeverScrollableScrollPhysics() 
+                    : const BouncingScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: effectiveCrossAxisCount,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 16 / 9,
+                  ),
+                  itemBuilder: (context, index) {
+                    if (index < displayCameras.length) {
+                      final camera = displayCameras[index];
+                      return GestureDetector(
+                        onDoubleTap: () => provider.toggleSoloCamera(camera.id),
+                        child: CameraViewWidget(key: ValueKey(camera.id), camera: camera),
+                      );
+                    } else {
+                      return _buildEmptySlot(context);
+                    }
+                  },
+                );
+              }
             );
           },
         ),
       ),
+    );
+  }
+
+  Widget _buildTaskButton(BuildContext context) {
+    return Consumer<TaskProvider>(
+      builder: (context, taskProvider, _) => Stack(
+        alignment: Alignment.center,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.download_for_offline, color: Colors.greenAccent),
+            tooltip: 'Download Tasks',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => const DownloadTasksDialog(),
+              );
+            },
+          ),
+          if (taskProvider.activeTaskCount > 0)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                child: Text(
+                  '${taskProvider.activeTaskCount}',
+                  style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAddButton(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.add_to_queue),
+      tooltip: 'Add NVR',
+      onPressed: () {
+        showDialog(
+          context: context,
+          builder: (context) => const NvrFormDialog(),
+        );
+      },
     );
   }
 
@@ -294,64 +322,81 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildQualityToggle(BuildContext context) {
+  Widget _buildQualityToggle(BuildContext context, {bool compact = false}) {
     final provider = Provider.of<NvrProvider>(context);
     final isHd = provider.quality == StreamQuality.hd;
     
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           _qualityButton(
             context, 
-            'SMOOTH', 
+            compact ? 'SM' : 'SMOOTH', 
             !isHd, 
             Colors.greenAccent, 
-            () => provider.setQuality(StreamQuality.smooth)
+            () => provider.setQuality(StreamQuality.smooth),
+            compact: compact
           ),
           _qualityButton(
             context, 
             'HD', 
             isHd, 
             Colors.blueAccent, 
-            () => provider.setQuality(StreamQuality.hd)
+            () => provider.setQuality(StreamQuality.hd),
+            compact: compact
           ),
         ],
       ),
     );
   }
 
-  Widget _qualityButton(BuildContext context, String label, bool isActive, Color activeColor, VoidCallback onTap) {
+  Widget _qualityButton(BuildContext context, String label, bool isActive, Color activeColor, VoidCallback onTap, {bool compact = false}) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(6),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12, vertical: 6),
         decoration: BoxDecoration(
           color: isActive ? activeColor.withOpacity(0.2) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: isActive ? Border.all(color: activeColor.withOpacity(0.5)) : null,
+          borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: isActive ? activeColor : Colors.white38,
-            fontSize: 10,
+            color: isActive ? activeColor : Colors.white24,
+            fontSize: 9,
             fontWeight: FontWeight.bold,
-            letterSpacing: 0.5,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildBatchControls(BuildContext context) {
+  Widget _buildBatchControls(BuildContext context, {bool compact = false}) {
     final provider = Provider.of<NvrProvider>(context, listen: false);
+    if (compact) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            onPressed: provider.playAll,
+            icon: const Icon(Icons.play_circle_fill, color: Colors.blueAccent),
+            tooltip: 'PLAY ALL',
+          ),
+          IconButton(
+            onPressed: provider.stopAll,
+            icon: const Icon(Icons.stop_circle, color: Colors.orangeAccent),
+            tooltip: 'STOP ALL',
+          ),
+        ],
+      );
+    }
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [

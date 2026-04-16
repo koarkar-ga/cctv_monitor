@@ -101,64 +101,110 @@ class _NvrFormDialogState extends State<NvrFormDialog> {
                 validator: (value) => value == null || value.isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: TextFormField(
-                      controller: _hostController,
-                      decoration: const InputDecoration(labelText: 'IP / Domain', border: OutlineInputBorder()),
-                      validator: (value) => value == null || value.isEmpty ? 'Required' : null,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 1,
-                    child: TextFormField(
-                      controller: _portController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'RTSP Port', 
-                        border: OutlineInputBorder(),
-                        helperText: 'Usually 554',
+              LayoutBuilder(builder: (context, constraints) {
+                bool isMobile = constraints.maxWidth < 450;
+                if (isMobile) {
+                  return Column(
+                    children: [
+                      TextFormField(
+                        controller: _hostController,
+                        decoration: const InputDecoration(labelText: 'IP / Domain', border: OutlineInputBorder()),
+                        validator: (value) => value == null || value.isEmpty ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _portController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(labelText: 'RTSP Port', border: OutlineInputBorder()),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: TextFormField(
+                              controller: _isapiPortController,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(labelText: 'HTTP Port', border: OutlineInputBorder()),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: TextFormField(
+                        controller: _hostController,
+                        decoration: const InputDecoration(labelText: 'IP / Domain', border: OutlineInputBorder()),
+                        validator: (value) => value == null || value.isEmpty ? 'Required' : null,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    flex: 1,
-                    child: TextFormField(
-                      controller: _isapiPortController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'HTTP/Web Port', 
-                        border: OutlineInputBorder(),
-                        helperText: '80, 81, 8000, etc.',
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 1,
+                      child: TextFormField(
+                        controller: _portController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'RTSP', border: OutlineInputBorder()),
                       ),
                     ),
-                  ),
-                ],
-              ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 1,
+                      child: TextFormField(
+                        controller: _isapiPortController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'HTTP', border: OutlineInputBorder()),
+                      ),
+                    ),
+                  ],
+                );
+              }),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _userController,
-                      decoration: const InputDecoration(labelText: 'Username', border: OutlineInputBorder()),
-                      validator: (value) => value == null || value.isEmpty ? 'Required' : null,
+              LayoutBuilder(builder: (context, constraints) {
+                bool isMobile = constraints.maxWidth < 450;
+                if (isMobile) {
+                  return Column(
+                    children: [
+                      TextFormField(
+                        controller: _userController,
+                        decoration: const InputDecoration(labelText: 'Username', border: OutlineInputBorder()),
+                        validator: (value) => value == null || value.isEmpty ? 'Required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                        controller: _passController,
+                        obscureText: true,
+                        decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder()),
+                      ),
+                    ],
+                  );
+                }
+                return Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _userController,
+                        decoration: const InputDecoration(labelText: 'Username', border: OutlineInputBorder()),
+                        validator: (value) => value == null || value.isEmpty ? 'Required' : null,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _passController,
-                      obscureText: true,
-                      decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder()),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _passController,
+                        obscureText: true,
+                        decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder()),
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                );
+              }),
               const SizedBox(height: 12),
               TextFormField(
                 controller: _streamKeyController,
