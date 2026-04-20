@@ -7,6 +7,7 @@ class AdvancedSeeker extends StatefulWidget {
   final List<RecordingSegment> events;
   final DateTime startTime;
   final DateTime endTime;
+  final RecordingSegment? activeSegment;
   final Function(double)? onSeekUpdate;
   final Function(double, Offset)?
   onHoverUpdate; // New: Hover callback with position
@@ -17,6 +18,7 @@ class AdvancedSeeker extends StatefulWidget {
     required this.events,
     required this.startTime,
     required this.endTime,
+    this.activeSegment,
     this.onSeekUpdate,
     this.onHoverUpdate,
   });
@@ -85,10 +87,9 @@ class _AdvancedSeekerState extends State<AdvancedSeeker> {
                     widget.onHoverUpdate!(value, details.localPosition);
                   }
                 },
-                onHorizontalDragEnd: (details) async {
-                  if (duration != Duration.zero) {
-                    await widget.player.seek(duration * _dragValue);
-                    await widget.player.play();
+                onHorizontalDragEnd: (details) {
+                  if (widget.onSeekUpdate != null) {
+                    widget.onSeekUpdate!(_dragValue);
                   }
                   setState(() {
                     _isDragging = false;
@@ -99,15 +100,14 @@ class _AdvancedSeekerState extends State<AdvancedSeeker> {
                     widget.onHoverUpdate!(-1.0, Offset.zero);
                   }
                 },
-                onTapDown: (details) async {
+                onTapDown: (details) {
                   final double value =
                       (details.localPosition.dx / constraints.maxWidth).clamp(
                         0.0,
                         1.0,
                       );
-                  if (duration != Duration.zero) {
-                    await widget.player.seek(duration * value);
-                    await widget.player.play();
+                  if (widget.onSeekUpdate != null) {
+                    widget.onSeekUpdate!(value);
                   }
                 },
                 child: Container(
@@ -121,6 +121,7 @@ class _AdvancedSeekerState extends State<AdvancedSeeker> {
                       events: widget.events,
                       startTime: widget.startTime,
                       endTime: widget.endTime,
+                      activeSegment: widget.activeSegment,
                       isDragging: _isDragging,
                       dragValue: _dragValue,
                       isHovering: _isHovering,
@@ -147,6 +148,7 @@ class SeekerPainter extends CustomPainter {
   final double dragValue;
   final bool isHovering;
   final double hoverValue;
+  final RecordingSegment? activeSegment;
 
   SeekerPainter({
     required this.position,
@@ -158,23 +160,23 @@ class SeekerPainter extends CustomPainter {
     required this.dragValue,
     required this.isHovering,
     required this.hoverValue,
+    this.activeSegment,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white24
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round;
-
-    // 1. Draw Background Bar
+    // 1. Draw Background Bar (No Record Area)
     final centerY = size.height / 2;
-    canvas.drawLine(Offset(0, centerY), Offset(size.width, centerY), paint);
+    final bgPaint = Paint()
+      ..color = Colors.white.withOpacity(0.05)
+      ..strokeWidth = 6
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(Offset(0, centerY), Offset(size.width, centerY), bgPaint);
 
-    // 2. Draw Motion/Recording Events (Yellow/Orange bars)
+    // 2. Draw Recording Segments (Solid Green/Cyan)
     final eventPaint = Paint()
-      ..color = Colors.orangeAccent.withOpacity(0.8)
-      ..strokeWidth = 8;
+      ..color = Colors.greenAccent
+      ..strokeWidth = 10;
 
     final totalRangeMs = endTime.difference(startTime).inMilliseconds;
     if (totalRangeMs > 0) {
@@ -193,25 +195,46 @@ class SeekerPainter extends CustomPainter {
       }
     }
 
-    // 3. Draw Played Progress
-    final progressPaint = Paint()
-      ..color = Colors.blueAccent
-      ..strokeWidth = 4
-      ..strokeCap = StrokeCap.round;
+    if (totalRangeMs > 0) {
+      double globalProgressX = 0;
+      
+      if (activeSegment != null && duration != Duration.zero) {
+        final absolutePlayheadMs = activeSegment!.start.difference(startTime).inMilliseconds + position.inMilliseconds;
+        globalProgressX = (absolutePlayheadMs / totalRangeMs) * size.width;
+      }
 
-    if (duration != Duration.zero) {
-      final double progressX =
-          (position.inMilliseconds / duration.inMilliseconds) * size.width;
-      canvas.drawLine(
-        Offset(0, centerY),
-        Offset(progressX, centerY),
-        progressPaint,
-      );
+      // 3. Draw Played Progress (Inside the active segment)
+      if (activeSegment != null && duration != Duration.zero) {
+        final startMs = activeSegment!.start.difference(startTime).inMilliseconds;
+        final startX = (startMs / totalRangeMs) * size.width;
+        
+        final progressPaint = Paint()
+          ..color = Colors.blueAccent
+          ..strokeWidth = 10 // Same as eventPaint to overlay
+          ..strokeCap = StrokeCap.butt;
 
-      // 4. Draw Thumb (Playhead)
-      final thumbPaint = Paint()..color = Colors.white;
-      final double thumbX = isDragging ? dragValue * size.width : progressX;
-      canvas.drawCircle(Offset(thumbX, centerY), 6, thumbPaint);
+        canvas.drawLine(
+          Offset(startX, centerY),
+          Offset(globalProgressX, centerY),
+          progressPaint,
+        );
+      }
+
+      // 4. Draw Thumb (Playhead) - Brighter and Larger
+      final thumbPaint = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.fill;
+      final thumbBorderPaint = Paint()
+        ..color = Colors.blueAccent
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2;
+        
+      final double thumbX = isDragging ? dragValue * size.width : globalProgressX;
+      
+      if (activeSegment != null || isDragging) {
+        canvas.drawCircle(Offset(thumbX, centerY), 8, thumbPaint);
+        canvas.drawCircle(Offset(thumbX, centerY), 8, thumbBorderPaint);
+      }
     }
 
     // 5. Draw Hover Indicator

@@ -37,17 +37,29 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
   List<RecordingSegment> _recordedSegments = [];
   bool _clipSearchLoading = false;
   bool _useLocalTime =
-      true; // Use local time for RTSP parameters instead of UTC
+      false; // Use local time for RTSP parameters instead of UTC
   Set<int> _recordedDays = {};
   bool _isLoadingRecordings = false;
-  bool _isSidebarCollapsed = false;
+
+  // New: Persist search range for seeker global bounds
+  DateTime? _searchStart;
+  DateTime? _searchEnd;
+  RecordingSegment? _activeSegment;
 
   @override
   void initState() {
     super.initState();
     final provider = Provider.of<NvrProvider>(context, listen: false);
-    if (provider.nvrs.isNotEmpty) {
+    if (provider.selectedNvrId != null) {
+      _selectedNvr = provider.nvrs.firstWhere(
+        (n) => n.id == provider.selectedNvrId,
+        orElse: () => provider.nvrs.isNotEmpty ? provider.nvrs.first : provider.nvrs.first, // Fallback if not found
+      );
+    } else if (provider.nvrs.isNotEmpty) {
       _selectedNvr = provider.nvrs.first;
+    }
+    
+    if (_selectedNvr != null) {
       _loadRecordingAvailability();
     }
   }
@@ -98,6 +110,10 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
       _searchSuccess = false;
       _isPlaybackActive = false;
       _recordedSegments = [];
+      // Initialize global search bounds for the seeker
+      _searchStart = _startDate;
+      _searchEnd = _endDate;
+      _activeSegment = null;
     });
 
     try {
@@ -160,9 +176,8 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
         setState(() {
           _isLoading = false;
           _isPlaybackActive = true;
-          // Synchronize UI times with the segment
-          _startDate = segment.start;
-          _endDate = segment.end;
+          _activeSegment = segment;
+          // DON'T synchronize _startDate/_endDate here, we want to keep global seeker bounds
         });
       }
     } catch (e) {
@@ -276,55 +291,23 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
   }
 
   Widget _buildSidebar() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      width: _isSidebarCollapsed ? 60 : 300,
+    return _buildExpandedSidebar();
+  }
+
+
+  Widget _buildExpandedSidebar({bool isDrawer = false}) {
+    return Container(
+      width: isDrawer ? null : 300,
       decoration: const BoxDecoration(
         color: Color(0xFF161621),
         border: Border(right: BorderSide(color: Colors.white10)),
       ),
-      child: _isSidebarCollapsed
-          ? _buildCollapsedSidebar()
-          : _buildExpandedSidebar(),
-    );
-  }
-
-  Widget _buildCollapsedSidebar() {
-    return Column(
-      children: [
-        const SizedBox(height: 16),
-        IconButton(
-          icon: const Icon(Icons.chevron_right, color: Colors.blueAccent),
-          onPressed: () => setState(() => _isSidebarCollapsed = false),
-          tooltip: 'Expand Sidebar',
-        ),
-        const Spacer(),
-        const RotatedBox(
-          quarterTurns: 3,
-          child: Text(
-            'SEARCH',
-            style: TextStyle(
-              color: Colors.white24,
-              fontSize: 12,
-              letterSpacing: 1.2,
-            ),
-          ),
-        ),
-        const SizedBox(height: 32),
-      ],
-    );
-  }
-
-  Widget _buildExpandedSidebar({bool isDrawer = false}) {
-    return Container(
-      color: const Color(0xFF161621),
       child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Text(
                   'SEARCH PARAMETERS',
@@ -334,18 +317,6 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
                     fontSize: 12,
                     letterSpacing: 1.1,
                   ),
-                ),
-                if (!isDrawer)
-                IconButton(
-                  icon: const Icon(
-                    Icons.chevron_left,
-                    color: Colors.white38,
-                    size: 20,
-                  ),
-                  onPressed: () => setState(() => _isSidebarCollapsed = true),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  tooltip: 'Collapse Sidebar',
                 ),
               ],
             ),
@@ -485,28 +456,29 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
 
     return Column(
       children: [
-        Consumer<NvrProvider>(
-          builder: (context, provider, _) =>
-              DropdownButtonFormField<NvrGroupModel>(
-                value: _selectedNvr,
-                disabledHint: Text(
-                  _selectedNvr?.name ?? 'No NVR Selected',
-                  style: const TextStyle(color: Colors.grey),
-                ),
-                dropdownColor: const Color(0xFF1E1E2C),
-                style: const TextStyle(color: Colors.white, fontSize: 14),
-                decoration: inputDecoration.copyWith(labelText: 'NVR Group'),
-                items: provider.nvrs
-                    .map((n) => DropdownMenuItem(value: n, child: Text(n.name)))
-                    .toList(),
-                onChanged: _searchSuccess
-                    ? null
-                    : (n) => setState(() {
-                        _selectedNvr = n;
-                        _selectedChannel = 1;
-                        _loadRecordingAvailability();
-                      }),
+        // Show Currently Selected NVR instead of a dropdown
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'ACTIVE DEVICE',
+                style: TextStyle(color: Colors.grey, fontSize: 9, fontWeight: FontWeight.bold),
               ),
+              const SizedBox(height: 4),
+              Text(
+                _selectedNvr?.name ?? 'No Device Selected',
+                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 16),
         DropdownButtonFormField<int>(
@@ -681,9 +653,6 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
             ? null 
             : () {
                 _startPlayback();
-                if (Navigator.of(context).canPop()) {
-                  Navigator.of(context).pop(); // Close drawer on search
-                }
               },
         icon: _isLoading
             ? const SizedBox(
@@ -845,7 +814,8 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
                       start: _startDate,
                       end: _endDate,
                     );
-                    await _recordingService.startRecording(url);
+                    final provider = Provider.of<NvrProvider>(context, listen: false);
+                    await _recordingService.startRecording(url, customPath: provider.recordingPath);
                   }
                   if (mounted) setState(() {});
                 },
@@ -1036,7 +1006,11 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
   }
 
   String _getWallClockTime(Duration pos) {
-    final wallTime = _startDate.add(pos);
+    if (_activeSegment != null) {
+      final wallTime = _activeSegment!.start.add(pos);
+      return DateFormat('HH:mm:ss').format(wallTime);
+    }
+    final wallTime = (_searchStart ?? _startDate).add(pos);
     return DateFormat('HH:mm:ss').format(wallTime);
   }
 
@@ -1066,8 +1040,9 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
               AdvancedSeeker(
                 player: _player,
                 events: _recordedSegments,
-                startTime: _startDate,
-                endTime: _endDate,
+                startTime: _searchStart ?? _startDate,
+                endTime: _searchEnd ?? _endDate,
+                activeSegment: _activeSegment,
                 onSeekUpdate: _onSeekUpdate,
                 onHoverUpdate: _onHoverUpdate,
               ),
@@ -1281,8 +1256,10 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
     }
 
     // Calculate actual time at this position
-    final totalRange = _endDate.difference(_startDate);
-    final hoverTime = _startDate.add(totalRange * relativePosition);
+    final start = _searchStart ?? _startDate;
+    final end = _searchEnd ?? _endDate;
+    final totalRange = end.difference(start);
+    final hoverTime = start.add(totalRange * relativePosition);
     final timeStr = DateFormat('HH:mm:ss').format(hoverTime);
 
     setState(() {
@@ -1310,12 +1287,41 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
   }
 
   void _onSeekUpdate(double relativePosition) {
+    if (relativePosition < 0) return;
+
     // 1. Update the floating bubble preview
     _onHoverUpdate(relativePosition, Offset.zero);
 
-    // 2. Immediate jump (Real-time seeking)
-    if (_player.state.duration != Duration.zero) {
-      _player.seek(_player.state.duration * relativePosition);
+    // 2. Map global relative position to wall-clock time
+    final start = _searchStart ?? _startDate;
+    final end = _searchEnd ?? _endDate;
+    final totalRange = end.difference(start);
+    final seekTime = start.add(totalRange * relativePosition);
+
+    // 3. Find the segment that contains this time
+    RecordingSegment? targetSegment;
+    for (var seg in _recordedSegments) {
+      // Use a small buffer to handle boundary issues
+      if (seekTime.isAfter(seg.start.subtract(const Duration(seconds: 1))) &&
+          seekTime.isBefore(seg.end.add(const Duration(seconds: 1)))) {
+        targetSegment = seg;
+        break;
+      }
+    }
+
+    if (targetSegment != null) {
+      final offset = seekTime.difference(targetSegment.start);
+      if (_activeSegment != null &&
+          _activeSegment!.start == targetSegment.start &&
+          _activeSegment!.end == targetSegment.end) {
+        // Same segment, just seek
+        _player.seek(offset);
+      } else {
+        // Different segment, switch and seek
+        _playSegment(targetSegment).then((_) {
+          _player.seek(offset);
+        });
+      }
     }
   }
 }

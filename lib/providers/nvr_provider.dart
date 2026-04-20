@@ -14,15 +14,24 @@ class NvrProvider with ChangeNotifier {
   String? _selectedNvrId;
   String? _selectedCameraId;
   StreamQuality _quality = StreamQuality.smooth; // Default to smooth for stability
+  String? _recordingPath;
+  bool _isGlobalMuted = true; // Default to muted
 
   List<NvrGroupModel> get nvrs => _nvrs;
   int get gridSize => _gridSize;
   String? get selectedNvrId => _selectedNvrId;
   String? get selectedCameraId => _selectedCameraId;
   StreamQuality get quality => _quality;
+  bool get isGlobalMuted => _isGlobalMuted;
+  String? get recordingPath => _recordingPath;
 
   void setQuality(StreamQuality q) {
     _quality = q;
+    notifyListeners();
+  }
+
+  void setGlobalMute(bool muted) {
+    _isGlobalMuted = muted;
     notifyListeners();
   }
 
@@ -31,10 +40,6 @@ class NvrProvider with ChangeNotifier {
   }
 
   List<CameraModel> get displayCameras {
-    if (_selectedCameraId != null) {
-      return allCameras.where((c) => c.id == _selectedCameraId).toList();
-    }
-
     if (_nvrs.isEmpty) return [];
     
     if (_selectedNvrId != null) {
@@ -59,6 +64,8 @@ class NvrProvider with ChangeNotifier {
       _nvrs = nvrJsonList.map((c) => NvrGroupModel.fromJson(c)).toList();
       _selectedNvrId = _nvrs.isNotEmpty ? _nvrs.first.id : null;
     }
+
+    _recordingPath = prefs.getString('cctv_recording_path');
     
     notifyListeners();
   }
@@ -67,6 +74,16 @@ class NvrProvider with ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final nvrJsonList = _nvrs.map((c) => c.toJson()).toList();
     await prefs.setStringList('cctv_nvrs', nvrJsonList);
+    
+    if (_recordingPath != null) {
+      await prefs.setString('cctv_recording_path', _recordingPath!);
+    }
+  }
+
+  void setRecordingPath(String? path) {
+    _recordingPath = path;
+    _saveNvrs();
+    notifyListeners();
   }
 
   void addNvr(NvrGroupModel nvr) {

@@ -30,6 +30,7 @@ class _CameraViewWidgetState extends State<CameraViewWidget> {
   int _lastPlaySignal = 0;
   int _lastStopSignal = 0;
   StreamQuality? _currentQuality;
+  bool? _isLastMuted;
   final TransformationController _transformationController =
       TransformationController();
   bool _isSoloMode = false;
@@ -163,6 +164,12 @@ class _CameraViewWidgetState extends State<CameraViewWidget> {
     }
     _isSoloMode = isSolo;
 
+    // Handle Global Mute
+    if (_isLastMuted != provider.isGlobalMuted) {
+      _isLastMuted = provider.isGlobalMuted;
+      _player?.setVolume(_isLastMuted! ? 0 : 100);
+    }
+
     // Detect batch play
     if (provider.globalPlaySignal > _lastPlaySignal) {
       _lastPlaySignal = provider.globalPlaySignal;
@@ -233,41 +240,46 @@ class _CameraViewWidgetState extends State<CameraViewWidget> {
                               : 'SMOOTH',
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 8,
+                            fontSize: 7,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 4),
                       // Record Button
-                      IconButton(
-                        icon: Icon(
-                          _recordingService.isRecording
-                              ? Icons.stop_circle
-                              : Icons.fiber_manual_record,
-                          color: _recordingService.isRecording
-                              ? Colors.red
-                              : Colors.white70,
+                      SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: IconButton(
+                          padding: EdgeInsets.zero,
+                          iconSize: 14,
+                          icon: Icon(
+                            _recordingService.isRecording
+                                ? Icons.stop_circle
+                                : Icons.fiber_manual_record,
+                            color: _recordingService.isRecording
+                                ? Colors.red
+                                : Colors.white70,
+                          ),
+                          onPressed: () async {
+                            if (_recordingService.isRecording) {
+                              await _recordingService.stopRecording();
+                            } else {
+                              final nvr = provider.nvrs.firstWhere(
+                                (n) => n.id == widget.camera.nvrId,
+                              );
+                              final url = RtspHelper.getLiveUrl(
+                                nvr: nvr,
+                                channel: widget.camera.channelIndex + 1,
+                                quality: provider.quality,
+                              );
+                              await _recordingService.startRecording(url,
+                                  customPath: provider.recordingPath);
+                            }
+                            if (mounted) setState(() {});
+                          },
+                          tooltip: _recordingService.isRecording ? 'Stop' : 'Record',
                         ),
-                        onPressed: () async {
-                          if (_recordingService.isRecording) {
-                            await _recordingService.stopRecording();
-                          } else {
-                            final nvr = provider.nvrs.firstWhere(
-                              (n) => n.id == widget.camera.nvrId,
-                            );
-                            final url = RtspHelper.getLiveUrl(
-                              nvr: nvr,
-                              channel: widget.camera.channelIndex + 1,
-                              quality: provider.quality,
-                            );
-                            await _recordingService.startRecording(url);
-                          }
-                          if (mounted) setState(() {});
-                        },
-                        tooltip: _recordingService.isRecording
-                            ? 'Stop Recording'
-                            : 'Start Recording',
                       ),
                       const SizedBox(width: 8),
                       // Zoom Controls (Only in Solo)
@@ -313,6 +325,9 @@ class _CameraViewWidgetState extends State<CameraViewWidget> {
                           onPressed: () =>
                               provider.toggleSoloCamera(widget.camera.id),
                           tooltip: 'Exit Full Screen',
+                          iconSize: 14,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
                         )
                       else
                         IconButton(
@@ -322,6 +337,9 @@ class _CameraViewWidgetState extends State<CameraViewWidget> {
                           ),
                           onPressed: _stopPlayer,
                           tooltip: 'Stop Stream',
+                          iconSize: 14,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
                         ),
                     ],
                   ),
@@ -357,7 +375,7 @@ class _CameraViewWidgetState extends State<CameraViewWidget> {
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
-              fontSize: 12,
+              fontSize: 10,
             ),
           ),
         ],
@@ -429,7 +447,7 @@ class _CameraViewWidgetState extends State<CameraViewWidget> {
               'Connection Error\n${widget.camera.name}',
               style: const TextStyle(
                 color: Colors.redAccent,
-                fontSize: 13,
+                fontSize: 11,
                 fontWeight: FontWeight.bold,
               ),
               textAlign: TextAlign.center,

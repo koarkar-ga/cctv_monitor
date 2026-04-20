@@ -11,9 +11,11 @@ class RecordingService {
   bool get isRecording => _isRecording;
   String? get currentFilePath => _currentFilePath;
 
-  Future<String> _getRecordingPath() async {
+  Future<String> _getRecordingPath(String? customBase) async {
     Directory? downloads;
-    if (Platform.isMacOS) {
+    if (customBase != null && customBase.isNotEmpty) {
+      downloads = Directory(customBase);
+    } else if (Platform.isMacOS) {
       downloads = Directory('${Platform.environment['HOME']}/Downloads/CCTV_Records');
     } else {
       downloads = await getDownloadsDirectory();
@@ -27,15 +29,19 @@ class RecordingService {
     return '${downloads?.path}/recording_$timestamp.mp4';
   }
 
-  Future<bool> startRecording(String rtspUrl) async {
+  Future<bool> startRecording(String rtspUrl, {String? customPath}) async {
     if (_isRecording) return false;
 
     try {
-      _currentFilePath = await _getRecordingPath();
+      _currentFilePath = await _getRecordingPath(customPath);
       
-      // Using /opt/homebrew/bin/ffmpeg as verified on the system
+      // Use discovered Windows path as primary for this system, or fallback to 'ffmpeg' in PATH
+      final ffmpegPath = Platform.isWindows 
+          ? r'C:\Program Files\Wondershare\Wondershare UniConverter for Windows\ffmpeg.exe'
+          : '/opt/homebrew/bin/ffmpeg';
+          
       _process = await Process.start(
-        '/opt/homebrew/bin/ffmpeg',
+        ffmpegPath,
         [
           '-rtsp_transport', 'tcp',
           '-i', rtspUrl,
@@ -80,13 +86,17 @@ class RecordingService {
   }
 
   /// Downloads a specific time range using ffmpeg (Timed Capture)
-  Future<bool> downloadSegment(String rtspUrl, Duration duration) async {
+  Future<bool> downloadSegment(String rtspUrl, Duration duration, {String? customPath}) async {
     try {
-      final path = await _getRecordingPath();
+      final path = await _getRecordingPath(customPath);
       final seconds = duration.inSeconds;
 
+      final ffmpegPath = Platform.isWindows 
+          ? r'C:\Program Files\Wondershare\Wondershare UniConverter for Windows\ffmpeg.exe'
+          : '/opt/homebrew/bin/ffmpeg';
+
       final process = await Process.start(
-        '/opt/homebrew/bin/ffmpeg',
+        ffmpegPath,
         [
           '-rtsp_transport', 'tcp',
           '-i', rtspUrl,

@@ -53,7 +53,7 @@ class NvrGroupModel {
       int channelNum = index + 1;
       return CameraModel(
         id: '${id}_$channelNum',
-        name: '$name - CH${channelNum.toString().padLeft(2, '0')}',
+        name: 'CH${channelNum.toString().padLeft(2, '0')}',
         url: getRtspUrl(channelNum),
         nvrId: id,
         channelIndex: index,

@@ -7,9 +7,24 @@ import '../widgets/camera_view_widget.dart';
 import '../widgets/nvr_form_dialog.dart';
 import '../widgets/download_tasks_dialog.dart';
 import 'playback_screen.dart';
+import 'settings_screen.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  PageController? _pageController;
+  String? _lastSoloId;
+
+  @override
+  void dispose() {
+    _pageController?.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,28 +32,33 @@ class DashboardScreen extends StatelessWidget {
       backgroundColor: const Color(0xFF1E1E2C),
       drawer: _buildDrawer(context),
       appBar: AppBar(
-        title: const Text('CCTV Command Center'),
+        title: const Text('MOONSUN CCTV Monitoring Center'),
         backgroundColor: const Color(0xFF252538),
         elevation: 0,
         actions: [
           _buildVpnStatus(context),
           const SizedBox(width: 8),
           // Condense App Bar actions for mobile
-          LayoutBuilder(builder: (context, constraints) {
-            bool isMobile = MediaQuery.of(context).size.width < 600;
-            return Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildQualityToggle(context, compact: isMobile),
-                const SizedBox(width: 8),
-                _buildBatchControls(context, compact: isMobile),
-                const SizedBox(width: 4),
-                _buildGridSelector(context),
-                _buildTaskButton(context),
-                _buildAddButton(context),
-              ],
-            );
-          }),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              bool isMobile = MediaQuery.of(context).size.width < 600;
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildQualityToggle(context, compact: isMobile),
+                  const SizedBox(width: 4),
+                  _buildMuteToggle(context),
+                  const SizedBox(width: 8),
+                  _buildBatchControls(context, compact: isMobile),
+                  const SizedBox(width: 4),
+                  _buildGridSelector(context),
+                  _buildPlaybackButton(context),
+                  _buildTaskButton(context),
+                  _buildAddButton(context),
+                ],
+              );
+            },
+          ),
           const SizedBox(width: 8),
         ],
       ),
@@ -51,9 +71,16 @@ class DashboardScreen extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.videocam_off, size: 64, color: Colors.grey),
+                    const Icon(
+                      Icons.videocam_off,
+                      size: 64,
+                      color: Colors.grey,
+                    ),
                     const SizedBox(height: 16),
-                    const Text('No NVRs Configured', style: TextStyle(color: Colors.grey, fontSize: 18)),
+                    const Text(
+                      'No NVRs Configured',
+                      style: TextStyle(color: Colors.grey, fontSize: 18),
+                    ),
                     const SizedBox(height: 16),
                     ElevatedButton.icon(
                       onPressed: () {
@@ -64,7 +91,7 @@ class DashboardScreen extends StatelessWidget {
                       },
                       icon: const Icon(Icons.add),
                       label: const Text('Add NVR Group'),
-                    )
+                    ),
                   ],
                 ),
               );
@@ -74,14 +101,51 @@ class DashboardScreen extends StatelessWidget {
             int crossAxisCount = _calcCrossAxisCount(provider.gridSize);
             int itemCount = provider.gridSize;
 
-            // Fix: If a solo camera is selected, force it to 1x1 full screen
             if (provider.selectedCameraId != null) {
-              crossAxisCount = 1;
-              itemCount = 1;
-            } else if (displayCameras.length > provider.gridSize) {
-              itemCount = displayCameras.length;
-              crossAxisCount = _calcCrossAxisCount(itemCount);
+              // Full Screen Solo PageView
+              final initialPage = displayCameras.indexWhere(
+                (c) => c.id == provider.selectedCameraId,
+              );
+
+              if (_pageController == null ||
+                  _lastSoloId != provider.selectedCameraId) {
+                _pageController?.dispose();
+                _pageController = PageController(
+                  initialPage: initialPage >= 0 ? initialPage : 0,
+                );
+                _lastSoloId = provider.selectedCameraId;
+              }
+
+              return PageView.builder(
+                controller: _pageController,
+                itemCount: displayCameras.length,
+                onPageChanged: (index) {
+                  // Update the selected camera quietly to avoid unnecessary jump
+                  provider.toggleSoloCamera(displayCameras[index].id);
+                  _lastSoloId = displayCameras[index].id;
+                },
+                itemBuilder: (context, index) {
+                  final camera = displayCameras[index];
+                  return Container(
+                    color: Colors.black,
+                    child: Center(
+                      child: GestureDetector(
+                        onDoubleTap: () => provider.toggleSoloCamera(camera.id),
+                        child: CameraViewWidget(
+                          key: ValueKey(camera.id),
+                          camera: camera,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              );
             }
+
+            // Normal Grid View
+            _pageController?.dispose();
+            _pageController = null;
+            _lastSoloId = null;
 
             return LayoutBuilder(
               builder: (context, constraints) {
@@ -90,15 +154,15 @@ class DashboardScreen extends StatelessWidget {
                 if (constraints.maxWidth < 600) {
                   effectiveCrossAxisCount = 1;
                 } else if (constraints.maxWidth < 1100) {
-                  effectiveCrossAxisCount = crossAxisCount > 2 ? 2 : crossAxisCount;
+                  effectiveCrossAxisCount = crossAxisCount > 2
+                      ? 2
+                      : crossAxisCount;
                 }
 
                 return GridView.builder(
                   itemCount: itemCount,
                   padding: const EdgeInsets.only(bottom: 20),
-                  physics: provider.selectedCameraId != null 
-                    ? const NeverScrollableScrollPhysics() 
-                    : const BouncingScrollPhysics(),
+                  physics: const BouncingScrollPhysics(),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: effectiveCrossAxisCount,
                     crossAxisSpacing: 12,
@@ -110,14 +174,17 @@ class DashboardScreen extends StatelessWidget {
                       final camera = displayCameras[index];
                       return GestureDetector(
                         onDoubleTap: () => provider.toggleSoloCamera(camera.id),
-                        child: CameraViewWidget(key: ValueKey(camera.id), camera: camera),
+                        child: CameraViewWidget(
+                          key: ValueKey(camera.id),
+                          camera: camera,
+                        ),
                       );
                     } else {
                       return _buildEmptySlot(context);
                     }
                   },
                 );
-              }
+              },
             );
           },
         ),
@@ -150,48 +217,80 @@ class DashboardScreen extends StatelessWidget {
           final s = vpn.status;
           return AlertDialog(
             backgroundColor: const Color(0xFF252538),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
             title: Row(
               children: [
                 const Icon(Icons.security, color: Colors.blueAccent),
                 const SizedBox(width: 12),
-                const Text('Netbird VPN Status', style: TextStyle(color: Colors.white, fontSize: 18)),
+                const Text(
+                  'Netbird VPN Status',
+                  style: TextStyle(color: Colors.white, fontSize: 18),
+                ),
               ],
             ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _vpnInfoItem('Status', s.management, s.isConnected ? Colors.greenAccent : Colors.redAccent),
+                _vpnInfoItem(
+                  'Status',
+                  s.management,
+                  s.isConnected ? Colors.greenAccent : Colors.redAccent,
+                ),
                 _vpnInfoItem('Netbird IP', s.ip, Colors.white),
                 _vpnInfoItem('Profile', s.profile, Colors.white),
                 _vpnInfoItem('Peers', s.peers, Colors.blueAccent),
                 if (s.lastError.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  Text(s.lastError, style: const TextStyle(color: Colors.redAccent, fontSize: 10)),
+                  Text(
+                    s.lastError,
+                    style: const TextStyle(
+                      color: Colors.redAccent,
+                      fontSize: 10,
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: s.isConnected ? Colors.redAccent.withOpacity(0.8) : Colors.greenAccent.withOpacity(0.8),
+                      backgroundColor: s.isConnected
+                          ? Colors.redAccent.withOpacity(0.8)
+                          : Colors.greenAccent.withOpacity(0.8),
                       foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                     onPressed: vpn.isToggling ? null : () => vpn.toggleVpn(),
-                    child: vpn.isToggling 
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : Text(s.isConnected ? 'DISCONNECT VPN' : 'CONNECT VPN', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    child: vpn.isToggling
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            s.isConnected ? 'DISCONNECT VPN' : 'CONNECT VPN',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
                   ),
                 ),
               ],
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.pop(context), 
-                child: const Text('Close', style: TextStyle(color: Colors.white38))
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'Close',
+                  style: TextStyle(color: Colors.white38),
+                ),
               ),
             ],
           );
@@ -206,8 +305,18 @@ class DashboardScreen extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: Colors.white38, fontSize: 13)),
-          Text(value, style: TextStyle(color: valueColor, fontSize: 13, fontWeight: FontWeight.bold)),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white38, fontSize: 13),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: valueColor,
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
@@ -219,7 +328,10 @@ class DashboardScreen extends StatelessWidget {
         alignment: Alignment.center,
         children: [
           IconButton(
-            icon: const Icon(Icons.download_for_offline, color: Colors.greenAccent),
+            icon: const Icon(
+              Icons.download_for_offline,
+              color: Colors.greenAccent,
+            ),
             tooltip: 'Download Tasks',
             onPressed: () {
               showDialog(
@@ -234,11 +346,18 @@ class DashboardScreen extends StatelessWidget {
               right: 8,
               child: Container(
                 padding: const EdgeInsets.all(2),
-                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                decoration: const BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                ),
                 constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
                 child: Text(
                   '${taskProvider.activeTaskCount}',
-                  style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 8,
+                    fontWeight: FontWeight.bold,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -269,39 +388,32 @@ class DashboardScreen extends StatelessWidget {
           return Column(
             children: [
               const DrawerHeader(
-                decoration: BoxDecoration(
-                  color: Color(0xFF1E1E2C),
-                ),
+                decoration: BoxDecoration(color: Color(0xFF1E1E2C)),
                 child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.dashboard, size: 48, color: Colors.blueAccent),
                       SizedBox(height: 12),
-                      Text('NVR Groups', style: TextStyle(color: Colors.white, fontSize: 18)),
+                      Text(
+                        'NVR Groups',
+                        style: TextStyle(color: Colors.white, fontSize: 18),
+                      ),
                     ],
                   ),
                 ),
               ),
               ListTile(
                 leading: const Icon(Icons.all_inclusive, color: Colors.white),
-                title: const Text('All Cameras', style: TextStyle(color: Colors.white)),
+                title: const Text(
+                  'All Cameras',
+                  style: TextStyle(color: Colors.white),
+                ),
                 selected: provider.selectedNvrId == null,
                 selectedTileColor: Colors.blueAccent.withOpacity(0.2),
                 onTap: () {
                   provider.selectNvr(null);
                   Navigator.pop(context);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.history, color: Colors.orangeAccent),
-                title: const Text('Video Playback', style: TextStyle(color: Colors.white)),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const PlaybackScreen()),
-                  );
                 },
               ),
               const Divider(color: Colors.white24),
@@ -311,13 +423,29 @@ class DashboardScreen extends StatelessWidget {
                   itemBuilder: (context, index) {
                     final nvr = provider.nvrs[index];
                     return ListTile(
-                      leading: const Icon(Icons.video_camera_back, color: Colors.blueAccent),
-                      title: Text(nvr.name, style: const TextStyle(color: Colors.white)),
-                      subtitle: Text('${nvr.numberOfChannels} Channels', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                      leading: const Icon(
+                        Icons.video_camera_back,
+                        color: Colors.blueAccent,
+                      ),
+                      title: Text(
+                        nvr.name,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      subtitle: Text(
+                        '${nvr.numberOfChannels} Channels',
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 12,
+                        ),
+                      ),
                       selected: provider.selectedNvrId == nvr.id,
                       selectedTileColor: Colors.blueAccent.withOpacity(0.2),
                       trailing: IconButton(
-                        icon: const Icon(Icons.edit, color: Colors.grey, size: 18),
+                        icon: const Icon(
+                          Icons.edit,
+                          color: Colors.grey,
+                          size: 18,
+                        ),
                         onPressed: () {
                           Navigator.pop(context);
                           showDialog(
@@ -336,25 +464,26 @@ class DashboardScreen extends StatelessWidget {
               ),
               const Divider(color: Colors.white24),
               ListTile(
-                leading: const Icon(Icons.file_download, color: Colors.green),
-                title: const Text('Export Config', style: TextStyle(color: Colors.white)),
-                onTap: () async {
+                leading: const Icon(
+                  Icons.settings_rounded,
+                  color: Colors.blueAccent,
+                ),
+                title: const Text(
+                  'Settings',
+                  style: TextStyle(color: Colors.white),
+                ),
+                subtitle: const Text(
+                  'Recording path, Config Export/Import',
+                  style: TextStyle(color: Colors.white24, fontSize: 10),
+                ),
+                onTap: () {
                   Navigator.pop(context);
-                  bool success = await provider.exportConfig();
-                  if (success) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Exported Successfully')));
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.file_upload, color: Colors.orange),
-                title: const Text('Import Config', style: TextStyle(color: Colors.white)),
-                onTap: () async {
-                  Navigator.pop(context);
-                  bool success = await provider.importConfig();
-                  if (success) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Imported Successfully')));
-                  }
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const SettingsScreen(),
+                    ),
+                  );
                 },
               ),
               const SizedBox(height: 16),
@@ -403,7 +532,11 @@ class DashboardScreen extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.add_circle_outline, color: Colors.blueAccent, size: 48),
+              Icon(
+                Icons.add_circle_outline,
+                color: Colors.blueAccent,
+                size: 48,
+              ),
               SizedBox(height: 8),
               Text('Add NVR Group', style: TextStyle(color: Colors.grey)),
             ],
@@ -413,10 +546,42 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildPlaybackButton(BuildContext context) {
+    return IconButton(
+      icon: const Icon(
+        Icons.slow_motion_video_rounded,
+        color: Colors.orangeAccent,
+        size: 20,
+      ),
+      tooltip: 'Video Playback',
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const PlaybackScreen()),
+        );
+      },
+    );
+  }
+
+  Widget _buildMuteToggle(BuildContext context) {
+    final provider = Provider.of<NvrProvider>(context);
+    final isMuted = provider.isGlobalMuted;
+
+    return IconButton(
+      icon: Icon(
+        isMuted ? Icons.volume_off : Icons.volume_up,
+        color: isMuted ? Colors.white24 : Colors.blueAccent,
+        size: 20,
+      ),
+      tooltip: isMuted ? 'UNMUTE ALL' : 'CLOSE ALL SPEAKER',
+      onPressed: () => provider.setGlobalMute(!isMuted),
+    );
+  }
+
   Widget _buildQualityToggle(BuildContext context, {bool compact = false}) {
     final provider = Provider.of<NvrProvider>(context);
     final isHd = provider.quality == StreamQuality.hd;
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
       decoration: BoxDecoration(
@@ -427,32 +592,42 @@ class DashboardScreen extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _qualityButton(
-            context, 
-            compact ? 'SM' : 'SMOOTH', 
-            !isHd, 
-            Colors.greenAccent, 
+            context,
+            compact ? 'SM' : 'SMOOTH',
+            !isHd,
+            Colors.greenAccent,
             () => provider.setQuality(StreamQuality.smooth),
-            compact: compact
+            compact: compact,
           ),
           _qualityButton(
-            context, 
-            'HD', 
-            isHd, 
-            Colors.blueAccent, 
+            context,
+            'HD',
+            isHd,
+            Colors.blueAccent,
             () => provider.setQuality(StreamQuality.hd),
-            compact: compact
+            compact: compact,
           ),
         ],
       ),
     );
   }
 
-  Widget _qualityButton(BuildContext context, String label, bool isActive, Color activeColor, VoidCallback onTap, {bool compact = false}) {
+  Widget _qualityButton(
+    BuildContext context,
+    String label,
+    bool isActive,
+    Color activeColor,
+    VoidCallback onTap, {
+    bool compact = false,
+  }) {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(6),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12, vertical: 6),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 8 : 12,
+          vertical: 6,
+        ),
         decoration: BoxDecoration(
           color: isActive ? activeColor.withOpacity(0.2) : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
@@ -494,15 +669,33 @@ class DashboardScreen extends StatelessWidget {
         TextButton.icon(
           onPressed: provider.playAll,
           icon: const Icon(Icons.play_arrow_rounded, color: Colors.blueAccent),
-          label: const Text('PLAY ALL', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-          style: TextButton.styleFrom(backgroundColor: Colors.white.withOpacity(0.05)),
+          label: const Text(
+            'PLAY ALL',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          style: TextButton.styleFrom(
+            backgroundColor: Colors.white.withOpacity(0.05),
+          ),
         ),
         const SizedBox(width: 8),
         TextButton.icon(
           onPressed: provider.stopAll,
           icon: const Icon(Icons.stop_rounded, color: Colors.orangeAccent),
-          label: const Text('STOP ALL', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-          style: TextButton.styleFrom(backgroundColor: Colors.white.withOpacity(0.05)),
+          label: const Text(
+            'STOP ALL',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          style: TextButton.styleFrom(
+            backgroundColor: Colors.white.withOpacity(0.05),
+          ),
         ),
       ],
     );

@@ -25,7 +25,7 @@ class CCTVMetaApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => VpnProvider()),
       ],
       child: MaterialApp(
-        title: 'CCTV Command Center',
+        title: 'MOONSUN Monitoring Center',
         debugShowCheckedModeBanner: false,
         theme: ThemeData.dark().copyWith(
           scaffoldBackgroundColor: const Color(0xFF1E1E2C),

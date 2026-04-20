@@ -42,7 +42,7 @@ class HikvisionService {
       <endTime>$endTimeStr</endTime>
     </timeSpan>
   </timeSpanList>
-  <maxResults>100</maxResults>
+  <maxResults>4000</maxResults>
   <searchResultPostion>0</searchResultPostion>
   <metadataList>
     <metadataDescriptor>MOTION</metadataDescriptor>
@@ -184,7 +184,7 @@ class HikvisionService {
       <endTime>$endTimeStr</endTime>
     </timeSpan>
   </timeSpanList>
-  <maxResults>100</maxResults>
+  <maxResults>4000</maxResults>
   <searchResultPostion>0</searchResultPostion>
 </CMSearchDescription>
 ''';
@@ -270,7 +270,7 @@ class HikvisionService {
       <endTime>$endTimeStr</endTime>
     </timeSpan>
   </timeSpanList>
-  <maxResults>50</maxResults>
+  <maxResults>4000</maxResults>
 </CMSearchDescription>
 ''';
 
@@ -321,11 +321,21 @@ class HikvisionService {
         final results = document.findAllElements('searchMatchItem');
         final Set<int> recordedDays = {};
         for (var item in results) {
-          final timeSpan = item.findElements('timeSpan').first;
-          final startStr = timeSpan.findElements('startTime').first.text;
-          final startTime = DateTime.parse(startStr).toLocal();
-          recordedDays.add(startTime.day);
+          try {
+            final timeSpan = item.findElements('timeSpan').first;
+            final startStr = timeSpan.findElements('startTime').first.text;
+            // Parse as UTC (has Z) then convert to local
+            final startTime = DateTime.parse(startStr).toLocal();
+            recordedDays.add(startTime.day);
+          } catch (e) {
+            print('Error parsing availability item: $e');
+          }
         }
+
+        // Logic check: If we hit exactly 4000, there might be more.
+        // For the calendar, we just need the days. 4000 segments 
+        // usually covers a month unless it's constant 1-min recording.
+        // We'll trust 4000 for now as it's a 80x increase from 50.
         return recordedDays;
       }
     } catch (e) {
