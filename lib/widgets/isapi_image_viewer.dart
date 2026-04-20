@@ -68,7 +68,7 @@ class _IsapiImageViewerState extends State<IsapiImageViewer> {
         '8000',
       ];
       final String port = commonPorts[_retryCount % commonPorts.length];
-      final url = 'http://${widget.nvr.host}:$port$currentPath';
+      final url = 'http://${widget.nvr.cleanHost}:$port$currentPath';
 
       final auth =
           'Basic ${base64Encode(utf8.encode('${widget.nvr.username}:${widget.nvr.password}'))}';

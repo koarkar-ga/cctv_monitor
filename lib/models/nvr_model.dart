@@ -30,10 +30,18 @@ class NvrGroupModel {
     this.snapshotFps = 10,
   });
 
+  /// Returns the host part without any port if it was included in the string
+  String get cleanHost {
+    if (host.contains(':')) {
+      return host.split(':').first;
+    }
+    return host;
+  }
+
   String getRtspUrl(int channel) {
     String encodedPass = Uri.encodeComponent(password);
     String base =
-        'rtsp://$username:$encodedPass@$host:$port/Streaming/Channels/${channel}0$streamType';
+        'rtsp://$username:$encodedPass@$cleanHost:$port/Streaming/Channels/${channel}0$streamType';
     if (streamKey != null && streamKey!.isNotEmpty) {
       return '$base?verificationCode=$streamKey';
     }

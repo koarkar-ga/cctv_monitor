@@ -20,11 +20,11 @@ class RtspHelper {
       if (rawPass.contains('%')) rawPass = Uri.decodeComponent(rawPass);
     } catch (_) {}
 
-    final safePass = rawPass.replaceAll('@', '%40').replaceAll(':', '%3A');
+    final safePass = Uri.encodeComponent(rawPass);
     final trackId = quality == StreamQuality.hd ? '${channel}01' : '${channel}02';
 
     // 2. Format the Base URL
-    String url = 'rtsp://${nvr.username}:$safePass@${nvr.host}:${nvr.port}/Streaming/Channels/$trackId';
+    String url = 'rtsp://${nvr.username}:$safePass@${nvr.cleanHost}:${nvr.port}/Streaming/Channels/$trackId';
     
     // 3. Phase 12: ONVIF Profile Bypass for Mandalay 5
     // Appending profile=Profile_X targets the ONVIF media handler in the DVR, 
@@ -56,10 +56,10 @@ class RtspHelper {
       if (rawPass.contains('%')) rawPass = Uri.decodeComponent(rawPass);
     } catch (_) {}
     
-    final safePass = rawPass.replaceAll('@', '%40').replaceAll(':', '%3A');
+    final safePass = Uri.encodeComponent(rawPass);
     final trackId = '${channel}01';
 
-    String url = 'rtsp://${nvr.username}:$safePass@${nvr.host}:${nvr.port}/Streaming/tracks/$trackId/?starttime=$startStr&endtime=$endStr';
+    String url = 'rtsp://${nvr.username}:$safePass@${nvr.cleanHost}:${nvr.port}/Streaming/tracks/$trackId/?starttime=$startStr&endtime=$endStr';
     
     if (nvr.streamKey != null && nvr.streamKey!.isNotEmpty) {
       url += '&profile=Profile_1'; // Force ONVIF mode for playback as well

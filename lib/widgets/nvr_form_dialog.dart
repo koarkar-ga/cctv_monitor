@@ -60,16 +60,31 @@ class _NvrFormDialogState extends State<NvrFormDialog> {
     if (_formKey.currentState!.validate()) {
       final provider = Provider.of<NvrProvider>(context, listen: false);
 
+      String inputHost = _hostController.text.trim();
+      String rtspPort = _portController.text.trim();
+      String httpPort = _isapiPortController.text.trim();
+
+      // Auto-split host and port if provided in host field (e.g. 1.2.3.4:81)
+      if (inputHost.contains(':')) {
+        final parts = inputHost.split(':');
+        inputHost = parts[0];
+        final discoveredPort = parts[1];
+        
+        // If port fields are currently at default or empty, update them with the discovered port
+        if (rtspPort == '554' || rtspPort.isEmpty) rtspPort = discoveredPort;
+        if (httpPort == '8000' || httpPort == '80' || httpPort.isEmpty) httpPort = discoveredPort;
+      }
+
       final newNvr = NvrGroupModel(
         id: widget.nvr?.id ?? const Uuid().v4(),
         name: _nameController.text.trim(),
-        host: _hostController.text.trim(),
-        port: int.tryParse(_portController.text.trim()) ?? 554,
+        host: inputHost,
+        port: int.tryParse(rtspPort) ?? 554,
         username: _userController.text.trim(),
         password: _passController.text.trim(),
         numberOfChannels: int.tryParse(_channelsController.text.trim()) ?? 16,
         streamType: _selectedStreamType,
-        isapiPort: _isapiPortController.text.trim().isEmpty ? '80' : _isapiPortController.text.trim(),
+        isapiPort: httpPort.isEmpty ? '80' : httpPort,
         streamKey: _streamKeyController.text.trim(),
         useSnapshot: _useSnapshot,
         snapshotFps: _snapshotFps,

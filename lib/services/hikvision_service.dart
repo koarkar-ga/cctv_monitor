@@ -80,7 +80,7 @@ class HikvisionService {
         if (portRefused) break; // Skip other endpoints if port is closed
 
         try {
-          final uri = Uri.parse('http://${nvr.host}:$port$endpoint');
+          final uri = Uri.parse('http://${nvr.cleanHost}:$port$endpoint');
           print('Trying ISAPI Search at: $uri');
 
           var response = await http
@@ -194,7 +194,7 @@ class HikvisionService {
     final port = nvr.isapiPort.split(RegExp(r'[/\s,]+')).first.trim();
 
     try {
-      final uri = Uri.parse('http://${nvr.host}:$port/ISAPI/ContentMgmt/search');
+      final uri = Uri.parse('http://${nvr.cleanHost}:$port/ISAPI/ContentMgmt/search');
       var response = await http.post(
         uri,
         headers: {
@@ -280,7 +280,7 @@ class HikvisionService {
 
     try {
       final uri = Uri.parse(
-        'http://${nvr.host}:$port/ISAPI/ContentMgmt/search',
+        'http://${nvr.cleanHost}:$port/ISAPI/ContentMgmt/search',
       );
       var response = await http
           .post(
@@ -393,7 +393,7 @@ class HikvisionService {
             '/ISAPI/Streaming/channels/${channel}02/picture$timeParam';
         var response = await http
             .get(
-              Uri.parse('http://${nvr.host}:$port$uriPath'),
+              Uri.parse('http://${nvr.cleanHost}:$port$uriPath'),
               headers: {'Authorization': auth},
             )
             .timeout(const Duration(seconds: 3));
@@ -413,7 +413,7 @@ class HikvisionService {
             if (digestHeader != null) {
               response = await http
                   .get(
-                    Uri.parse('http://${nvr.host}:$port$uriPath'),
+                    Uri.parse('http://${nvr.cleanHost}:$port$uriPath'),
                     headers: {'Authorization': digestHeader},
                   )
                   .timeout(const Duration(seconds: 3));
