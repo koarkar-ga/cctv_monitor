@@ -67,34 +67,42 @@ class _AdvancedSeekerState extends State<AdvancedSeeker> {
                 }
               },
               child: GestureDetector(
-                onHorizontalDragStart: (details) =>
-                    setState(() => _isDragging = true),
+                onHorizontalDragStart: (details) {
+                  setState(() {
+                    _isDragging = true;
+                    _dragValue = (details.localPosition.dx / constraints.maxWidth)
+                        .clamp(0.0, 1.0);
+                    _hoverValue = _dragValue;
+                  });
+                  // Show preview immediately on start
+                  if (widget.onHoverUpdate != null) {
+                    widget.onHoverUpdate!(_dragValue, details.localPosition);
+                  }
+                },
                 onHorizontalDragUpdate: (details) {
                   final double value =
                       (details.localPosition.dx / constraints.maxWidth).clamp(
-                        0.0,
-                        1.0,
-                      );
+                    0.0,
+                    1.0,
+                  );
                   setState(() {
                     _dragValue = value;
-                    _hoverValue = value; // Keep hover synced with drag
+                    _hoverValue = value;
                   });
-                  if (widget.onSeekUpdate != null) {
-                    widget.onSeekUpdate!(value);
-                  }
-                  // Keep preview updated during drag
+                  // Only update the preview/hover while dragging, don't seek yet
                   if (widget.onHoverUpdate != null) {
                     widget.onHoverUpdate!(value, details.localPosition);
                   }
                 },
                 onHorizontalDragEnd: (details) {
-                  if (widget.onSeekUpdate != null) {
+                  // Commit the seek when the user releases
+                  if (widget.onSeekUpdate != null && _dragValue >= 0) {
                     widget.onSeekUpdate!(_dragValue);
                   }
                   setState(() {
                     _isDragging = false;
                     _dragValue = -1.0;
-                    _isHovering = false; // Hide preview after drop
+                    _isHovering = false;
                   });
                   if (widget.onHoverUpdate != null) {
                     widget.onHoverUpdate!(-1.0, Offset.zero);
@@ -103,15 +111,25 @@ class _AdvancedSeekerState extends State<AdvancedSeeker> {
                 onTapDown: (details) {
                   final double value =
                       (details.localPosition.dx / constraints.maxWidth).clamp(
-                        0.0,
-                        1.0,
-                      );
+                    0.0,
+                    1.0,
+                  );
+                  // Update hover/preview on tap so user sees feedback
+                  if (widget.onHoverUpdate != null) {
+                    widget.onHoverUpdate!(value, details.localPosition);
+                    // Hide after a short delay
+                    Future.delayed(const Duration(milliseconds: 500), () {
+                      if (!_isDragging && mounted) {
+                        widget.onHoverUpdate!(-1.0, Offset.zero);
+                      }
+                    });
+                  }
                   if (widget.onSeekUpdate != null) {
                     widget.onSeekUpdate!(value);
                   }
                 },
                 child: Container(
-                  height: 40,
+                  height: 60, // Increased hit area
                   width: double.infinity,
                   color: Colors.transparent,
                   child: CustomPaint(

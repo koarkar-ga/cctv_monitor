@@ -111,6 +111,16 @@ class NvrProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  void reorderNvrs(int oldIndex, int newIndex) {
+    if (newIndex > oldIndex) {
+      newIndex -= 1;
+    }
+    final item = _nvrs.removeAt(oldIndex);
+    _nvrs.insert(newIndex, item);
+    _saveNvrs();
+    notifyListeners();
+  }
+
   void selectNvr(String? id) {
     _selectedNvrId = id;
     _selectedCameraId = null; // Clear solo view when switching NVR

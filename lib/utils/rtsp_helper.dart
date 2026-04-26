@@ -46,10 +46,15 @@ class RtspHelper {
     required DateTime start,
     required DateTime end,
     bool useLocalTime = true,
+    Duration? nvrOffset,
   }) {
+    // If nvrOffset is provided, we prioritize it over the manual useLocalTime toggle
+    final effectiveStart = nvrOffset != null ? start.add(nvrOffset) : (useLocalTime ? start : start.toUtc());
+    final effectiveEnd = nvrOffset != null ? end.add(nvrOffset) : (useLocalTime ? end : end.toUtc());
+
     final DateFormat formatter = DateFormat("yyyyMMdd'T'HHmmss");
-    final startStr = '${formatter.format(useLocalTime ? start : start.toUtc())}Z';
-    final endStr = '${formatter.format(useLocalTime ? end : end.toUtc())}Z';
+    final startStr = '${formatter.format(effectiveStart)}Z';
+    final endStr = '${formatter.format(effectiveEnd)}Z';
 
     String rawPass = nvr.password;
     try {

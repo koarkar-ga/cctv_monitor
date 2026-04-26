@@ -13,6 +13,18 @@ class RecordingSegment {
   RecordingSegment({required this.start, required this.end, required this.type});
 }
 
+class NvrTime {
+  final DateTime localTime;
+  final String timeZone;
+  final Duration offsetFromApp;
+
+  NvrTime({
+    required this.localTime,
+    required this.timeZone,
+    required this.offsetFromApp,
+  });
+}
+
 class HikvisionService {
   /// Searches for motion events on the NVR for a specific channel and time range
   static Future<List<RecordingSegment>> fetchMotionEvents({
@@ -240,12 +252,85 @@ class HikvisionService {
     }
   }
 
-  /// Fetches days with recordings for a specific month
+  /// Fetches days with recordings for a specific month using the dailyDistribution API
   static Future<Set<int>> fetchRecordingAvailability({
     required NvrGroupModel nvr,
     required int channel,
     required DateTime month,
   }) async {
+    final trackId = "${channel}01";
+    final year = month.year;
+    final monthStr = month.month.toString().padLeft(2, '0');
+
+    final auth =
+        'Basic ${base64Encode(utf8.encode('${nvr.username}:${nvr.password}'))}';
+    final port = nvr.isapiPort.split(RegExp(r'[/\s,]+')).first.trim();
+
+    try {
+      final uri = Uri.parse(
+        'http://${nvr.cleanHost}:$port/ISAPI/ContentMgmt/record/tracks/$trackId/dailyDistribution?year=$year&month=$monthStr',
+      );
+      print('Fetching daily distribution: $uri');
+      
+      var response = await http
+          .get(
+            uri,
+            headers: {'Authorization': auth},
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 401 &&
+          response.headers.containsKey('www-authenticate')) {
+        final authHeader = response.headers['www-authenticate']!;
+        if (authHeader.contains('Digest')) {
+          final digestHeader = _generateDigestHeader(
+            method: 'GET',
+            uri: '/ISAPI/ContentMgmt/record/tracks/$trackId/dailyDistribution?year=$year&month=$monthStr',
+            authHeader: authHeader,
+            username: nvr.username,
+            password: nvr.password,
+          );
+          if (digestHeader != null) {
+            response = await http
+                .get(
+                  uri,
+                  headers: {'Authorization': digestHeader},
+                )
+                .timeout(const Duration(seconds: 10));
+          }
+        }
+      }
+
+      if (response.statusCode == 200) {
+        final document = XmlDocument.parse(response.body);
+        final dayElements = document.findAllElements('day');
+        final Set<int> recordedDays = {};
+        
+        for (var dayElem in dayElements) {
+          final day = int.tryParse(dayElem.getAttribute('day') ?? '');
+          final state = dayElem.getAttribute('state');
+          if (day != null && state == 'recorded') {
+            recordedDays.add(day);
+          }
+        }
+        return recordedDays;
+      } else {
+        print('Daily distribution failed with status: ${response.statusCode}');
+        // Fallback to the old method if dailyDistribution is not supported by firmware
+        return _fetchRecordingAvailabilityFallback(nvr, channel, month);
+      }
+    } catch (e) {
+      print('Failed to fetch recording availability via dailyDistribution: $e');
+      return _fetchRecordingAvailabilityFallback(nvr, channel, month);
+    }
+  }
+
+  /// Original search-based fallback for older firmware
+  static Future<Set<int>> _fetchRecordingAvailabilityFallback(
+    NvrGroupModel nvr,
+    int channel,
+    DateTime month,
+  ) async {
     final searchId = const Uuid().v4();
     final startOfMonth = DateTime(month.year, month.month, 1);
     final endOfMonth = DateTime(month.year, month.month + 1, 0, 23, 59, 59);
@@ -324,23 +409,13 @@ class HikvisionService {
           try {
             final timeSpan = item.findElements('timeSpan').first;
             final startStr = timeSpan.findElements('startTime').first.text;
-            // Parse as UTC (has Z) then convert to local
             final startTime = DateTime.parse(startStr).toLocal();
             recordedDays.add(startTime.day);
-          } catch (e) {
-            print('Error parsing availability item: $e');
-          }
+          } catch (e) {}
         }
-
-        // Logic check: If we hit exactly 4000, there might be more.
-        // For the calendar, we just need the days. 4000 segments 
-        // usually covers a month unless it's constant 1-min recording.
-        // We'll trust 4000 for now as it's a 80x increase from 50.
         return recordedDays;
       }
-    } catch (e) {
-      print('Failed to fetch recording availability: $e');
-    }
+    } catch (e) {}
     return {};
   }
 
@@ -437,6 +512,79 @@ class HikvisionService {
       } catch (e) {
         // Continue to next port if one fails
       }
+    }
+    return null;
+  }
+
+  /// Fetches the NVR's current system time and calculates the offset from the app's local time.
+  static Future<NvrTime?> fetchSystemTime({
+    required NvrGroupModel nvr,
+  }) async {
+    final auth =
+        'Basic ${base64Encode(utf8.encode('${nvr.username}:${nvr.password}'))}';
+    final port = nvr.isapiPort.split(RegExp(r'[/\s,]+')).first.trim();
+
+    try {
+      final uri = Uri.parse('http://${nvr.cleanHost}:$port/ISAPI/System/Time');
+      var response = await http.get(
+        uri,
+        headers: {'Authorization': auth},
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 401 &&
+          response.headers.containsKey('www-authenticate')) {
+        final authHeader = response.headers['www-authenticate']!;
+        if (authHeader.contains('Digest')) {
+          final digestHeader = _generateDigestHeader(
+            method: 'GET',
+            uri: '/ISAPI/System/Time',
+            authHeader: authHeader,
+            username: nvr.username,
+            password: nvr.password,
+          );
+          if (digestHeader != null) {
+            response = await http.get(
+              uri,
+              headers: {'Authorization': digestHeader},
+            ).timeout(const Duration(seconds: 5));
+          }
+        }
+      }
+
+      if (response.statusCode == 200) {
+        final document = XmlDocument.parse(response.body);
+        final localTimeStr = document.findAllElements('localTime').first.text;
+        final timeZone = document.findAllElements('timeZone').first.text;
+
+        // Parse the NVR's local time string as "face time" (ignoring timezone for offset calc)
+        // localTimeStr example: 2023-10-27T10:00:00+06:30
+        // We want the "10:00:00" part to compare with App's current face time.
+        final String naiveTimeStr = localTimeStr.contains('+') 
+            ? localTimeStr.split('+').first 
+            : (localTimeStr.contains('Z') ? localTimeStr.split('Z').first : localTimeStr);
+            
+        final nvrFaceTime = DateTime.parse(naiveTimeStr);
+        final appLocalTime = DateTime.now();
+        final appFaceTime = DateTime(
+          appLocalTime.year,
+          appLocalTime.month,
+          appLocalTime.day,
+          appLocalTime.hour,
+          appLocalTime.minute,
+          appLocalTime.second,
+        );
+
+        // Calculate offset: NVR Face Time - App Face Time
+        final offset = nvrFaceTime.difference(appFaceTime);
+
+        return NvrTime(
+          localTime: nvrFaceTime,
+          timeZone: timeZone,
+          offsetFromApp: offset,
+        );
+      }
+    } catch (e) {
+      print('Fetch system time error: $e');
     }
     return null;
   }

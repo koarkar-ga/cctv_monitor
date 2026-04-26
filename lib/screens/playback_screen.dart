@@ -37,9 +37,11 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
   List<RecordingSegment> _recordedSegments = [];
   bool _clipSearchLoading = false;
   bool _useLocalTime =
-      false; // Use local time for RTSP parameters instead of UTC
+      true; // Use local time for RTSP parameters instead of UTC
   Set<int> _recordedDays = {};
   bool _isLoadingRecordings = false;
+  NvrTime? _nvrTime;
+  bool _isSyncingTime = false;
 
   // New: Persist search range for seeker global bounds
   DateTime? _searchStart;
@@ -53,14 +55,37 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
     if (provider.selectedNvrId != null) {
       _selectedNvr = provider.nvrs.firstWhere(
         (n) => n.id == provider.selectedNvrId,
-        orElse: () => provider.nvrs.isNotEmpty ? provider.nvrs.first : provider.nvrs.first, // Fallback if not found
+        orElse: () => provider.nvrs.isNotEmpty
+            ? provider.nvrs.first
+            : provider.nvrs.first, // Fallback if not found
       );
     } else if (provider.nvrs.isNotEmpty) {
       _selectedNvr = provider.nvrs.first;
     }
-    
+
     if (_selectedNvr != null) {
       _loadRecordingAvailability();
+      _syncNvrTime();
+    }
+  }
+
+  Future<void> _syncNvrTime() async {
+    if (_selectedNvr == null) return;
+    setState(() => _isSyncingTime = true);
+    try {
+      final time = await HikvisionService.fetchSystemTime(nvr: _selectedNvr!);
+      if (mounted) {
+        setState(() {
+          _nvrTime = time;
+          _isSyncingTime = false;
+          // If we found a significant offset (> 1 min), enable sync by default if not already set
+          if (time != null && time.offsetFromApp.abs().inMinutes > 1) {
+            // We'll use the offset automatically in the RTSP helper
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isSyncingTime = false);
     }
   }
 
@@ -160,6 +185,7 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
       start: segment.start,
       end: segment.end,
       useLocalTime: _useLocalTime,
+      nvrOffset: _nvrTime?.offsetFromApp,
     );
 
     try {
@@ -280,7 +306,9 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
             ),
         ],
       ),
-      endDrawer: isMobile ? Drawer(child: _buildExpandedSidebar(isDrawer: true)) : null,
+      endDrawer: isMobile
+          ? Drawer(child: _buildExpandedSidebar(isDrawer: true))
+          : null,
       body: Row(
         children: [
           if (!isMobile) _buildSidebar(),
@@ -293,7 +321,6 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
   Widget _buildSidebar() {
     return _buildExpandedSidebar();
   }
-
 
   Widget _buildExpandedSidebar({bool isDrawer = false}) {
     return Container(
@@ -456,6 +483,78 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
 
     return Column(
       children: [
+        if (_isSyncingTime)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 12),
+            child: LinearProgressIndicator(
+              minHeight: 2,
+              backgroundColor: Colors.transparent,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.blueAccent),
+            ),
+          ),
+        if (_nvrTime != null)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.blueAccent.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.access_time_rounded,
+                  color: Colors.blueAccent,
+                  size: 18,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'NVR SYSTEM CLOCK',
+                        style: TextStyle(
+                          color: Colors.blueAccent,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      Text(
+                        DateFormat('HH:mm:ss').format(_nvrTime!.localTime),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.greenAccent.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'SYNCED',
+                    style: TextStyle(
+                      color: Colors.greenAccent,
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         // Show Currently Selected NVR instead of a dropdown
         Container(
           width: double.infinity,
@@ -470,12 +569,20 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
             children: [
               const Text(
                 'ACTIVE DEVICE',
-                style: TextStyle(color: Colors.grey, fontSize: 9, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
                 _selectedNvr?.name ?? 'No Device Selected',
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ],
           ),
@@ -649,8 +756,8 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
           elevation: 4,
           shadowColor: Colors.blueAccent.withOpacity(0.3),
         ),
-        onPressed: _isLoading 
-            ? null 
+        onPressed: _isLoading
+            ? null
             : () {
                 _startPlayback();
               },
@@ -717,10 +824,16 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
         ),
         const SizedBox(height: 8),
         _buildCheckboxTile(
-          'Sync with NVR Local Time',
-          'Leave CHECKED to fix 6.5h shift (Myanmar/S.E.A)',
-          _useLocalTime,
-          (v) => setState(() => _useLocalTime = v ?? false),
+          _nvrTime != null
+              ? 'ISAPI Auto-Sync Active'
+              : 'Sync with NVR Local Time',
+          _nvrTime != null
+              ? 'Automatically using detected ${(_nvrTime!.offsetFromApp.inMinutes / 60).toStringAsFixed(1)}h offset'
+              : 'Leave CHECKED to fix 6.5h shift (Myanmar/S.E.A)',
+          _nvrTime != null ? true : _useLocalTime,
+          _nvrTime != null
+              ? null
+              : (bool? v) => setState(() => _useLocalTime = v ?? false),
         ),
         if (!_useLocalTime)
           Padding(
@@ -752,7 +865,7 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
     String title,
     String sub,
     bool val,
-    Function(bool?) onCh,
+    void Function(bool?)? onCh,
   ) {
     return Container(
       decoration: BoxDecoration(
@@ -814,8 +927,14 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
                       start: _startDate,
                       end: _endDate,
                     );
-                    final provider = Provider.of<NvrProvider>(context, listen: false);
-                    await _recordingService.startRecording(url, customPath: provider.recordingPath);
+                    final provider = Provider.of<NvrProvider>(
+                      context,
+                      listen: false,
+                    );
+                    await _recordingService.startRecording(
+                      url,
+                      customPath: provider.recordingPath,
+                    );
                   }
                   if (mounted) setState(() {});
                 },
@@ -1298,10 +1417,11 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
     final totalRange = end.difference(start);
     final seekTime = start.add(totalRange * relativePosition);
 
-    // 3. Find the segment that contains this time
+    // 3. Find the segment that contains this time OR the next available segment
     RecordingSegment? targetSegment;
+    DateTime adjustedSeekTime = seekTime;
+
     for (var seg in _recordedSegments) {
-      // Use a small buffer to handle boundary issues
       if (seekTime.isAfter(seg.start.subtract(const Duration(seconds: 1))) &&
           seekTime.isBefore(seg.end.add(const Duration(seconds: 1)))) {
         targetSegment = seg;
@@ -1309,8 +1429,19 @@ class _PlaybackScreenState extends State<PlaybackScreen> {
       }
     }
 
+    // If no direct hit, find the nearest upcoming segment
+    if (targetSegment == null) {
+      for (var seg in _recordedSegments) {
+        if (seg.start.isAfter(seekTime)) {
+          targetSegment = seg;
+          adjustedSeekTime = seg.start;
+          break;
+        }
+      }
+    }
+
     if (targetSegment != null) {
-      final offset = seekTime.difference(targetSegment.start);
+      final offset = adjustedSeekTime.difference(targetSegment.start);
       if (_activeSegment != null &&
           _activeSegment!.start == targetSegment.start &&
           _activeSegment!.end == targetSegment.end) {

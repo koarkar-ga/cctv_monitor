@@ -418,11 +418,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               const Divider(color: Colors.white24),
               Expanded(
-                child: ListView.builder(
-                  itemCount: provider.nvrs.length,
-                  itemBuilder: (context, index) {
+                child: ReorderableListView(
+                  onReorder: (oldIndex, newIndex) {
+                    provider.reorderNvrs(oldIndex, newIndex);
+                  },
+                  children: List.generate(provider.nvrs.length, (index) {
                     final nvr = provider.nvrs[index];
                     return ListTile(
+                      key: ValueKey(nvr.id),
                       leading: const Icon(
                         Icons.video_camera_back,
                         color: Colors.blueAccent,
@@ -440,26 +443,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       selected: provider.selectedNvrId == nvr.id,
                       selectedTileColor: Colors.blueAccent.withOpacity(0.2),
-                      trailing: IconButton(
-                        icon: const Icon(
-                          Icons.edit,
-                          color: Colors.grey,
-                          size: 18,
-                        ),
-                        onPressed: () {
-                          Navigator.pop(context);
-                          showDialog(
-                            context: context,
-                            builder: (context) => NvrFormDialog(nvr: nvr),
-                          );
-                        },
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(
+                              Icons.edit,
+                              color: Colors.grey,
+                              size: 18,
+                            ),
+                            onPressed: () {
+                              Navigator.pop(context);
+                              showDialog(
+                                context: context,
+                                builder: (context) => NvrFormDialog(nvr: nvr),
+                              );
+                            },
+                          ),
+                          const Icon(
+                            Icons.drag_handle,
+                            color: Colors.white24,
+                            size: 20,
+                          ),
+                        ],
                       ),
                       onTap: () {
                         provider.selectNvr(nvr.id);
                         Navigator.pop(context);
                       },
                     );
-                  },
+                  }),
                 ),
               ),
               const Divider(color: Colors.white24),
